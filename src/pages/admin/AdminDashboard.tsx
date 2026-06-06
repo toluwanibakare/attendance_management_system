@@ -54,6 +54,7 @@ import {
 } from 'recharts';
 import { 
   createCourse,
+  createLecturerByAdmin,
   bulkCreateCoursesFromText,
   bulkEnrollStudentsByMatricNumbers,
   getBluetoothVerificationLogs,
@@ -100,6 +101,24 @@ type CourseImportPreviewRow = {
   color: string;
   valid: boolean;
   reason?: string;
+};
+
+type LecturerFormState = {
+  fullName: string;
+  email: string;
+  password: string;
+  staffId: string;
+  department: string;
+  position: string;
+};
+
+const INITIAL_LECTURER_FORM: LecturerFormState = {
+  fullName: '',
+  email: '',
+  password: '',
+  staffId: '',
+  department: '',
+  position: 'Lecturer',
 };
 
 const INITIAL_COURSE_FORM: CourseFormState = {
@@ -151,6 +170,8 @@ export function AdminDashboard() {
   const [attendanceHistorySearch, setAttendanceHistorySearch] = useState('');
   const [attendanceHistoryMode, setAttendanceHistoryMode] = useState<'all' | AttendanceHistoryMode>('all');
   const [courseForm, setCourseForm] = useState<CourseFormState>(INITIAL_COURSE_FORM);
+  const [lecturerForm, setLecturerForm] = useState<LecturerFormState>(INITIAL_LECTURER_FORM);
+  const [isSavingLecturer, setIsSavingLecturer] = useState(false);
   const [userCounts, setUserCounts] = useState({
     totalUsers: 0,
     totalStudents: 0,
@@ -612,6 +633,39 @@ export function AdminDashboard() {
     refreshManagementData();
   };
 
+  const handleSubmitLecturer = async () => {
+    if (!lecturerForm.fullName.trim() || !lecturerForm.email.trim() || !lecturerForm.password.trim() || !lecturerForm.staffId.trim() || !lecturerForm.department.trim()) {
+      error('Fill in all required fields.');
+      return;
+    }
+    
+    if (lecturerForm.password.length < 8) {
+      error('Password must be at least 8 characters.');
+      return;
+    }
+
+    setIsSavingLecturer(true);
+    const result = await createLecturerByAdmin({
+      email: lecturerForm.email.trim(),
+      password: lecturerForm.password,
+      fullName: lecturerForm.fullName.trim(),
+      role: 'lecturer',
+      department: lecturerForm.department.trim(),
+      staffId: lecturerForm.staffId.trim(),
+      position: lecturerForm.position.trim(),
+    });
+    setIsSavingLecturer(false);
+
+    if (!result.success) {
+      error(result.message);
+      return;
+    }
+
+    success(result.message);
+    setLecturerForm(INITIAL_LECTURER_FORM);
+    refreshManagementData();
+  };
+
   const handleDeleteSelectedCourse = async () => {
     if (!selectedCourse) {
       return;
@@ -764,8 +818,24 @@ export function AdminDashboard() {
         className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
       >
         <div>
+          <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Welcome back, {admin.name}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="glass-card px-4 py-2 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-sm text-white">System Online</span>
+          </div>
+          <Button variant="outline" size="sm" className="border-white/10" onClick={handleExportReport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export Report
+          </Button>
+        </div>
+      </motion.div>
 
-        {/* Course Management */}
+      {/* Course Management */}
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1185,22 +1255,63 @@ export function AdminDashboard() {
             )}
           </div>
         </motion.section>
-          <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Welcome back, {admin.name}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="glass-card px-4 py-2 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-sm text-white">System Online</span>
+        {/* User Management */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="space-y-6 mt-6"
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                User Management
+              </h3>
+              <p className="text-sm text-muted-foreground">Create lecturers directly from the dashboard securely.</p>
+            </div>
           </div>
-          <Button variant="outline" size="sm" className="border-white/10" onClick={handleExportReport}>
-            <Download className="w-4 h-4 mr-2" />
-            Export Report
-          </Button>
-        </div>
-      </motion.div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="glass-card p-6 space-y-5">
+              <div>
+                <h4 className="text-base font-semibold text-white">Create Lecturer</h4>
+                <p className="text-sm text-muted-foreground">Add a new lecturer account.</p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Full Name</label>
+                  <Input value={lecturerForm.fullName} onChange={(e) => setLecturerForm({ ...lecturerForm, fullName: e.target.value })} placeholder="Dr. Jane Doe" className="bg-slate-800 border-slate-700 text-white" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Email</label>
+                  <Input type="email" value={lecturerForm.email} onChange={(e) => setLecturerForm({ ...lecturerForm, email: e.target.value })} placeholder="jane.doe@lasustech.edu.ng" className="bg-slate-800 border-slate-700 text-white" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Password</label>
+                  <Input type="password" value={lecturerForm.password} onChange={(e) => setLecturerForm({ ...lecturerForm, password: e.target.value })} placeholder="••••••••" className="bg-slate-800 border-slate-700 text-white" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Staff ID</label>
+                  <Input value={lecturerForm.staffId} onChange={(e) => setLecturerForm({ ...lecturerForm, staffId: e.target.value })} placeholder="LEC/001" className="bg-slate-800 border-slate-700 text-white" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Department</label>
+                  <Input value={lecturerForm.department} onChange={(e) => setLecturerForm({ ...lecturerForm, department: e.target.value })} placeholder="Computer Science" className="bg-slate-800 border-slate-700 text-white" />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Position</label>
+                  <Input value={lecturerForm.position} onChange={(e) => setLecturerForm({ ...lecturerForm, position: e.target.value })} placeholder="Senior Lecturer" className="bg-slate-800 border-slate-700 text-white" />
+                </div>
+              </div>
+
+              <Button onClick={handleSubmitLecturer} disabled={isSavingLecturer} className="w-full bg-primary mt-2">
+                {isSavingLecturer ? 'Creating...' : 'Create Lecturer'}
+              </Button>
+            </div>
+          </div>
+        </motion.section>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

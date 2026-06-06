@@ -639,6 +639,58 @@ export async function registerUser(input: RegisterUserInput): Promise<RegisterRe
   };
 }
 
+export async function createLecturerByAdmin(input: RegisterUserInput): Promise<ManagementResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Supabase is not configured.' };
+  }
+  
+  const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    return { success: false, message: 'VITE_SUPABASE_SERVICE_ROLE_KEY is missing in your environment configuration.' };
+  }
+
+  const normalizedEmail = input.email?.trim().toLowerCase() ?? '';
+  if (!normalizedEmail.endsWith('@lasustech.edu.ng')) {
+    return { success: false, message: 'Registrations are restricted to @lasustech.edu.ng email addresses.' };
+  }
+
+  const { createClient } = await import('@supabase/supabase-js');
+  const adminClient = createClient(import.meta.env.VITE_SUPABASE_URL, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+
+  const metadata: Record<string, unknown> = {
+    full_name: input.fullName.trim(),
+    role: 'lecturer',
+    department: input.department.trim(),
+    staff_id: input.staffId?.trim(),
+    position: input.position?.trim(),
+  };
+
+  const { data, error } = await adminClient.auth.admin.createUser({
+    email: input.email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: metadata,
+  });
+
+  if (error) {
+    const isEmailInUse = /already registered|already exists|duplicate/i.test(error.message);
+    return {
+      success: false,
+      message: isEmailInUse ? 'Email is already registered.' : error.message,
+    };
+  }
+  
+  return {
+    success: true,
+    message: `Lecturer ${input.fullName} created successfully.`,
+  };
+}
+
 export async function authenticateUser(email: string, password: string, role: UserRole): Promise<AuthResult> {
   if (!isSupabaseConfigured || !supabase) {
     return {
