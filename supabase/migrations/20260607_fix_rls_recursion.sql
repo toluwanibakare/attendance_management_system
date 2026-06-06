@@ -2,26 +2,36 @@
 
 create or replace function public.is_admin()
 returns boolean
-language sql
+language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  is_adm boolean;
+begin
   select exists (
     select 1 from public.profiles
     where id = auth.uid() and role = 'admin'
-  );
+  ) into is_adm;
+  return coalesce(is_adm, false);
+end;
 $$;
 
 create or replace function public.is_lecturer_or_admin()
 returns boolean
-language sql
+language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  is_valid boolean;
+begin
   select exists (
     select 1 from public.profiles
     where id = auth.uid() and role in ('lecturer', 'admin')
-  );
+  ) into is_valid;
+  return coalesce(is_valid, false);
+end;
 $$;
 
 -- Drop all recursive policies
