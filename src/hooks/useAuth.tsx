@@ -67,18 +67,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setAuthError(null);
 
-    const { user: authenticatedUser, message } = await authenticateUser(email, _password, role);
+    try {
+      const { user: authenticatedUser, message } = await authenticateUser(email, _password, role);
 
-    if (authenticatedUser) {
-      setUser(authenticatedUser);
+      if (authenticatedUser) {
+        setUser(authenticatedUser);
+        return true;
+      }
+
+      setAuthError(message);
+      return false;
+    } catch (error: any) {
+      setAuthError(error?.message || 'An unexpected error occurred during login.');
+      return false;
+    } finally {
       setIsLoading(false);
-      return true;
     }
-
-    setAuthError(message);
-
-    setIsLoading(false);
-    return false;
   }, []);
 
   const register = useCallback(async (input: RegisterInput): Promise<RegisterOutcome> => {
