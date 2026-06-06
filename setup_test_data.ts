@@ -71,41 +71,40 @@ async function setup() {
     // Wait a moment for triggers to run and profile rows to be created
     await new Promise(r => setTimeout(r, 2000));
 
-    // 4. Create Course
-    console.log('Creating Test Course...');
-    const { error: courseErr } = await supabase.from('courses').insert({
-      code: process.env.VITE_TEST_COURSE_CODE!,
-      title: process.env.VITE_TEST_COURSE_TITLE!,
-      description: 'Test course for system verification',
-      lecturer_id: lecturerData.user!.id,
-      lecturer_name: process.env.VITE_TEST_LECTURER_NAME!,
-      department: 'Computer Science',
-      level: 400,
-      total_students: 1
-    });
+    // 4. Create Courses
+    console.log('Creating Test Courses...');
+    const courseCodes = [
+      process.env.VITE_TEST_COURSE_CODE!,
+      'CSC 401', 'IFT 422', 'CSC 452', 'CSC 402', 'CSC 408'
+    ];
     
-    if (courseErr) {
-      if (courseErr.code === '23505') {
-         console.log('Course already exists.');
-      } else {
-         throw courseErr;
-      }
-    } else {
-      console.log('Course created:', process.env.VITE_TEST_COURSE_CODE);
-    }
-
-    // 5. Enroll student
-    console.log('Enrolling Student in Course...');
-    const { data: courseData } = await supabase.from('courses').select('id').eq('code', process.env.VITE_TEST_COURSE_CODE!).single();
-    
-    if (courseData) {
-      const { error: enrollErr } = await supabase.from('course_enrollments').insert({
-        course_id: courseData.id,
-        student_id: studentData.user!.id
+    for (const code of courseCodes) {
+      const { error: courseErr } = await supabase.from('courses').insert({
+        code: code,
+        title: code === process.env.VITE_TEST_COURSE_CODE! ? process.env.VITE_TEST_COURSE_TITLE! : `${code} Theory`,
+        description: 'Test course for system verification',
+        lecturer_id: lecturerData.user!.id,
+        lecturer_name: process.env.VITE_TEST_LECTURER_NAME!,
+        department: 'Computer Science',
+        level: 400,
+        total_students: 1
       });
-      if (enrollErr && enrollErr.code !== '23505') throw enrollErr;
-      console.log('Student enrolled successfully.');
+      
+      if (courseErr && courseErr.code !== '23505') {
+        throw courseErr;
+      }
+      
+      const { data: courseData } = await supabase.from('courses').select('id').eq('code', code).single();
+      
+      if (courseData) {
+        const { error: enrollErr } = await supabase.from('course_enrollments').insert({
+          course_id: courseData.id,
+          student_id: studentData.user!.id
+        });
+        if (enrollErr && enrollErr.code !== '23505') throw enrollErr;
+      }
     }
+    console.log('Courses created and student enrolled.');
 
     console.log('\n--- Setup Complete! ---');
 
