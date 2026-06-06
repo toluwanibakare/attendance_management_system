@@ -670,7 +670,7 @@ export async function createLecturerByAdmin(input: RegisterUserInput): Promise<M
     position: input.position?.trim(),
   };
 
-  const { data, error } = await adminClient.auth.admin.createUser({
+  const { error } = await adminClient.auth.admin.createUser({
     email: input.email,
     password: input.password,
     email_confirm: true,
