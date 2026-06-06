@@ -1,0 +1,433 @@
+import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useLocation, Link } from 'react-router-dom';
+import { 
+  Calendar, 
+  Clock, 
+  TrendingUp, 
+  ScanLine, 
+  BookOpen,
+  CheckCircle,
+  AlertCircle,
+  QrCode,
+  Search,
+} from 'lucide-react';
+import { useStudent } from '@/hooks/useAuthHooks';
+import { useAttendance } from '@/hooks/useAttendance';
+import { useToast } from '@/hooks/useToast';
+import { StatCard } from '@/components/ui/StatCard';
+import { CourseCard } from '@/components/ui/CourseCard';
+import { QRScanner } from '@/components/ui/QRScanner';
+import { Input } from '@/components/ui/input';
+import { getStudentCourses, subscribeToTableChanges, getStudentProgress, upsertStudentProgress, subscribeToStudentProgress } from '@/services/universityService';
+import type { ProgressEntry } from '@/services/universityService';
+import type { Course } from '@/types';
+import type { ScanResult } from '@/types';
+
+export function StudentDashboard() {
+  const student = useStudent();
+  const location = useLocation();
+  const { scanBarcode, getActiveSessionForCourse, attendanceRecords } = useAttendance();
+  const { success, error } = useToast();
+  
+  const [showScanner, setShowScanner] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [courseSearchQuery, setCourseSearchQuery] = useState('');
+  const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
+
+  useEffect(() => {
+    if (!student) return;
+
+    let isMounted = true;
+
+    const refreshCourses = () => {
+      void getStudentCourses(student.id).then((nextCourses) => {
+        if (isMounted) {
+          setCourses(nextCourses);
+        }
+      });
+    };
+
+    const refreshProgress = () => {
+      void getStudentProgress(student.id).then((entries) => {
+        if (isMounted) setProgressEntries(entries || []);
+      });
+    };
+
+    refreshCourses();
+    refreshProgress();
+    const cleanup = subscribeToTableChanges(['course_enrollments', 'courses', 'course_schedules'], refreshCourses);
+    const cleanupProgress = subscribeToStudentProgress(student.id, (entry) => {
+      setProgressEntries((prev) => {
+        const next = prev.filter((p) => p.id !== entry.id && !(p.userId === entry.userId && p.courseId === entry.courseId && p.key === entry.key));
+        next.unshift(entry);
+        return next;
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      cleanup?.();
+      cleanupProgress?.();
+    };
+  }, [student]);
+
+  const isDashboardView = location.pathname === '/dashboard';
+  const isCoursesView = location.pathname === '/courses';
+  const isScanView = location.pathname === '/scan';
+
+  useEffect(() => {
+    if (!isScanView) {
+      setShowScanner(false);
+      setSelectedCourseId(null);
+      return;
+    }
+
+    setShowScanner(true);
+  }, [isScanView]);
+
+  if (!student) return null;
+
+  const studentAttendanceRecords = attendanceRecords.filter((record) => record.studentId === student.id);
+  
+  // Calculate stats
+  const totalClasses = studentAttendanceRecords.length;
+  const presentCount = studentAttendanceRecords.filter(r => r.status === 'present').length;
+  const attendanceRate = totalClasses > 0 ? Math.round((presentCount / totalClasses) * 100) : 0;
+  const classesToday = courses.filter(c => c.schedule.day === new Date().toLocaleDateString('en-US', { weekday: 'long' })).length;
+  const visibleCourses = useMemo(() => {
+    const query = courseSearchQuery.trim().toLowerCase();
+
+    if (!query) return courses;
+
+    return courses.filter((course) => {
+      const searchTarget = [course.code, course.title, course.description, course.schedule.day, course.schedule.room]
+        .join(' ')
+        .toLowerCase();
+
+      return searchTarget.includes(query);
+    });
+  }, [courseSearchQuery, courses]);
+
+  const selectedActiveSession = selectedCourseId ? getActiveSessionForCourse(selectedCourseId) : undefined;
+
+  const handleScan = async (
+    data: string,
+    bluetoothContext?: {
+      bluetoothVerified?: boolean;
+      bluetoothDeviceName?: string;
+      bluetoothDeviceId?: string;
+    }
+  ): Promise<ScanResult> => {
+    const result = await scanBarcode(data, student.id, bluetoothContext);
+    
+    if (result.success) {
+      success(result.message);
+    } else {
+      error(result.message);
+    }
+    
+    return result;
+  };
+
+  const recentActivity = studentAttendanceRecords
+    .slice(-5)
+    .reverse()
+    .map(record => ({
+      id: record.id,
+      course: record.courseCode,
+      title: record.courseTitle,
+      date: record.date,
+      time: record.time,
+      status: record.status
+    }));
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+      >
+        <div>
+          <h1 className="text-3xl font-bold text-white">
+            {isCoursesView && 'My Courses'}
+            {isScanView && 'Scan Attendance'}
+            {isDashboardView && `Welcome back, ${student.name.split(' ')[0]}!`}
+          </h1>
+          <p className="text-muted-foreground flex items-center gap-2 mt-1">
+            <Calendar className="w-4 h-4" />
+            {isCoursesView && 'Browse your enrolled courses and open a scanner for any active session.'}
+            {isScanView && 'Open the scanner immediately for the active attendance session.'}
+            {isDashboardView && new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="glass-card px-4 py-2 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+            <span className="text-sm text-white">Student Portal</span>
+          </div>
+          <Link to="/progress" className="glass-card px-3 py-2 text-sm text-white hover:underline">View Progress</Link>
+        </div>
+      </motion.div>
+
+      {/* Stats Grid */}
+      {isDashboardView && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Attendance Rate"
+            value={`${attendanceRate}%`}
+            subtitle="Overall attendance performance"
+            icon={TrendingUp}
+            color="success"
+            trend="up"
+            trendValue="+5%"
+            delay={0}
+          />
+          <StatCard
+            title="Classes Today"
+            value={classesToday}
+            subtitle="Scheduled classes for today"
+            icon={BookOpen}
+            color="primary"
+            delay={0.1}
+          />
+          <StatCard
+            title="Total Scans"
+            value={presentCount}
+            subtitle="Successful attendance scans"
+            icon={QrCode}
+            color="secondary"
+            delay={0.2}
+          />
+          <StatCard
+            title="Current Streak"
+            value="12 days"
+            subtitle="Consecutive attendance"
+            icon={CheckCircle}
+            color="warning"
+            trend="up"
+            trendValue="Best"
+            delay={0.3}
+          />
+        </div>
+      )}
+
+      {/* Main Content Grid */}
+      <div className={`grid grid-cols-1 gap-6 ${isDashboardView ? 'lg:grid-cols-3' : 'lg:grid-cols-1'}`}>
+        {isDashboardView || isCoursesView ? (
+          <div className={isDashboardView ? 'lg:col-span-2 space-y-4' : 'space-y-4'}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-primary" />
+                My Courses
+              </h2>
+              <span className="text-sm text-muted-foreground">
+                {visibleCourses.length} of {courses.length} courses
+              </span>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={courseSearchQuery}
+                onChange={(event) => setCourseSearchQuery(event.target.value)}
+                placeholder="Search by course code, title, day, or room"
+                className="border-slate-700 bg-slate-800/70 pl-10 text-white placeholder:text-muted-foreground"
+              />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {visibleCourses.length > 0 ? (
+                visibleCourses.map((course, index) => (
+                  <CourseCard
+                    key={course.id}
+                    course={course}
+                    onClick={() => {
+                      setSelectedCourseId(course.id);
+                      setShowScanner(true);
+                    }}
+                    actionLabel="Scan Attendance"
+                    delay={index * 0.1}
+                  />
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-slate-800/30 p-8 text-sm text-muted-foreground md:col-span-2">
+                  No courses match your search. Try a different course code, title, room, or day.
+                </div>
+              )}
+            </div>
+            {/* Student Progress Panel (small) */}
+            {isDashboardView && (
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold text-white mb-3">Learning Progress</h3>
+                <div className="space-y-3">
+                  {progressEntries.length > 0 ? (
+                    progressEntries.map((entry) => {
+                      const course = entry.courseId ? courses.find((c) => c.id === entry.courseId) : undefined;
+                      return (
+                        <div key={entry.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-800/50">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{course ? `${course.code} • ${course.title}` : entry.key}</p>
+                            <p className="text-xs text-muted-foreground">Updated {new Date(entry.updatedAt).toLocaleString()}</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-medium text-white">{Math.round(entry.progressValue)}%</span>
+                            <button
+                              onClick={async () => {
+                                const nextValue = Math.min(100, Math.round(entry.progressValue + 10));
+                                const updated = await upsertStudentProgress(student.id, [{ courseId: entry.courseId ?? null, key: entry.key, progressValue: nextValue, meta: entry.meta ?? null }]);
+                                if (updated) setProgressEntries((prev) => [updated[0], ...prev.filter((p) => p.id !== updated[0].id)]);
+                              }}
+                              className="px-3 py-1 rounded-md bg-primary text-primary-foreground text-sm"
+                            >
+                              +10
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const updated = await upsertStudentProgress(student.id, [{ courseId: entry.courseId ?? null, key: entry.key, progressValue: 100, meta: entry.meta ?? null }]);
+                                if (updated) setProgressEntries((prev) => [updated[0], ...prev.filter((p) => p.id !== updated[0].id)]);
+                              }}
+                              className="px-3 py-1 rounded-md bg-success text-success-foreground text-sm"
+                            >
+                              Complete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-800/30 p-4 text-sm text-muted-foreground">
+                      No progress tracked yet. Progress entries will appear here as you interact with course content.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {(isDashboardView || isScanView) && (
+          <div className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+              className="glass-card p-6 text-center"
+            >
+              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
+                <ScanLine className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">Quick Scan</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Scan your lecturer's attendance code
+              </p>
+              <button
+                onClick={() => {
+                  setSelectedCourseId(null);
+                  setShowScanner(true);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+              >
+                <ScanLine className="w-5 h-5" />
+                Open Scanner
+              </button>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 }}
+              className="glass-card p-6"
+            >
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-secondary" />
+                Recent Activity
+              </h3>
+              
+              <div className="space-y-3">
+                {recentActivity.length > 0 ? (
+                  recentActivity.map((activity, index) => (
+                    <motion.div
+                      key={activity.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.5 + index * 0.1 }}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50"
+                    >
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        activity.status === 'present' ? 'bg-success/20' : 'bg-destructive/20'
+                      }`}>
+                        {activity.status === 'present' ? (
+                          <CheckCircle className="w-4 h-4 text-success" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-destructive" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{activity.course}</p>
+                        <p className="text-xs text-muted-foreground">{activity.date}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{activity.time}</span>
+                    </motion.div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No recent activity
+                  </p>
+                )}
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.5 }}
+              className="glass-card p-6"
+            >
+              <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-warning" />
+                Tips
+              </h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="text-primary">•</span>
+                  Arrive early to ensure successful scanning
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary">•</span>
+                  Keep your camera lens clean for better scans
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary">•</span>
+                  Codes expire after 15 minutes
+                </li>
+              </ul>
+            </motion.div>
+          </div>
+        )}
+      </div>
+
+      {/* QR Scanner Modal */}
+      {showScanner && (
+        <QRScanner
+          bluetoothSession={selectedActiveSession?.requiresBluetooth ? {
+            sessionId: selectedActiveSession.id,
+            requiresBluetooth: true,
+            bluetoothDeviceName: selectedActiveSession.bluetoothDeviceName,
+            bluetoothServiceUuid: selectedActiveSession.bluetoothServiceUuid,
+            courseTitle: selectedActiveSession.courseTitle,
+          } : null}
+          studentId={student.id}
+          onScan={handleScan}
+          onClose={() => {
+            setShowScanner(false);
+            setSelectedCourseId(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
