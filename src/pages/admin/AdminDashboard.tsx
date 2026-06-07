@@ -54,7 +54,7 @@ import {
 } from 'recharts';
 import { 
   createCourse,
-  createLecturerByAdmin,
+  createUserByAdmin,
   bulkCreateCoursesFromText,
   bulkEnrollStudentsByMatricNumbers,
   getBluetoothVerificationLogs,
@@ -103,22 +103,28 @@ type CourseImportPreviewRow = {
   reason?: string;
 };
 
-type LecturerFormState = {
+type UserFormState = {
+  role: 'student' | 'lecturer' | 'admin';
   fullName: string;
   email: string;
   password: string;
-  staffId: string;
   department: string;
+  staffId: string;
   position: string;
+  matricNumber: string;
+  level: string;
 };
 
-const INITIAL_LECTURER_FORM: LecturerFormState = {
+const INITIAL_USER_FORM: UserFormState = {
+  role: 'lecturer',
   fullName: '',
   email: '',
   password: '',
-  staffId: '',
   department: '',
+  staffId: '',
   position: 'Lecturer',
+  matricNumber: '',
+  level: '100',
 };
 
 const INITIAL_COURSE_FORM: CourseFormState = {
@@ -170,8 +176,8 @@ export function AdminDashboard() {
   const [attendanceHistorySearch, setAttendanceHistorySearch] = useState('');
   const [attendanceHistoryMode, setAttendanceHistoryMode] = useState<'all' | AttendanceHistoryMode>('all');
   const [courseForm, setCourseForm] = useState<CourseFormState>(INITIAL_COURSE_FORM);
-  const [lecturerForm, setLecturerForm] = useState<LecturerFormState>(INITIAL_LECTURER_FORM);
-  const [isSavingLecturer, setIsSavingLecturer] = useState(false);
+  const [userForm, setUserForm] = useState<UserFormState>(INITIAL_USER_FORM);
+  const [isSavingUser, setIsSavingUser] = useState(false);
   const [userCounts, setUserCounts] = useState({
     totalUsers: 0,
     totalStudents: 0,
@@ -633,28 +639,40 @@ export function AdminDashboard() {
     refreshManagementData();
   };
 
-  const handleSubmitLecturer = async () => {
-    if (!lecturerForm.fullName.trim() || !lecturerForm.email.trim() || !lecturerForm.password.trim() || !lecturerForm.staffId.trim() || !lecturerForm.department.trim()) {
-      error('Fill in all required fields.');
+  const handleSubmitUser = async () => {
+    if (!userForm.fullName.trim() || !userForm.email.trim() || !userForm.password.trim()) {
+      error('Fill in basic required fields (Name, Email, Password).');
       return;
     }
     
-    if (lecturerForm.password.length < 8) {
+    if (userForm.role === 'lecturer' && (!userForm.staffId.trim() || !userForm.department.trim())) {
+      error('Lecturers require Staff ID and Department.');
+      return;
+    }
+
+    if (userForm.role === 'student' && (!userForm.matricNumber.trim() || !userForm.department.trim())) {
+      error('Students require Matric Number and Department.');
+      return;
+    }
+    
+    if (userForm.password.length < 8) {
       error('Password must be at least 8 characters.');
       return;
     }
 
-    setIsSavingLecturer(true);
-    const result = await createLecturerByAdmin({
-      email: lecturerForm.email.trim(),
-      password: lecturerForm.password,
-      fullName: lecturerForm.fullName.trim(),
-      role: 'lecturer',
-      department: lecturerForm.department.trim(),
-      staffId: lecturerForm.staffId.trim(),
-      position: lecturerForm.position.trim(),
+    setIsSavingUser(true);
+    const result = await createUserByAdmin({
+      email: userForm.email.trim(),
+      password: userForm.password,
+      fullName: userForm.fullName.trim(),
+      role: userForm.role,
+      department: userForm.department.trim(),
+      staffId: userForm.role === 'lecturer' ? userForm.staffId.trim() : undefined,
+      position: userForm.role === 'lecturer' ? userForm.position.trim() : undefined,
+      matricNumber: userForm.role === 'student' ? userForm.matricNumber.trim() : undefined,
+      level: userForm.role === 'student' ? parseInt(userForm.level, 10) : undefined,
     });
-    setIsSavingLecturer(false);
+    setIsSavingUser(false);
 
     if (!result.success) {
       error(result.message);
@@ -662,7 +680,7 @@ export function AdminDashboard() {
     }
 
     success(result.message);
-    setLecturerForm(INITIAL_LECTURER_FORM);
+    setUserForm(INITIAL_USER_FORM);
     refreshManagementData();
   };
 
@@ -1268,46 +1286,87 @@ export function AdminDashboard() {
                 <Users className="w-5 h-5 text-primary" />
                 User Management
               </h3>
-              <p className="text-sm text-muted-foreground">Create lecturers directly from the dashboard securely.</p>
+              <p className="text-sm text-muted-foreground">Create accounts directly from the dashboard securely.</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="glass-card p-6 space-y-5">
               <div>
-                <h4 className="text-base font-semibold text-white">Create Lecturer</h4>
-                <p className="text-sm text-muted-foreground">Add a new lecturer account.</p>
+                <h4 className="text-base font-semibold text-white">Create User Account</h4>
+                <p className="text-sm text-muted-foreground">Add a new student, lecturer, or admin.</p>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Account Role</label>
+                  <select 
+                    value={userForm.role}
+                    onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}
+                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="student">Student</option>
+                    <option value="lecturer">Lecturer</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="mb-2 block text-sm font-medium text-muted-foreground">Full Name</label>
-                  <Input value={lecturerForm.fullName} onChange={(e) => setLecturerForm({ ...lecturerForm, fullName: e.target.value })} placeholder="Dr. Jane Doe" className="bg-slate-800 border-slate-700 text-white" />
+                  <Input value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} placeholder="John Doe" className="bg-slate-800 border-slate-700 text-white" />
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-muted-foreground">Email</label>
-                  <Input type="email" value={lecturerForm.email} onChange={(e) => setLecturerForm({ ...lecturerForm, email: e.target.value })} placeholder="jane.doe@lasustech.edu.ng" className="bg-slate-800 border-slate-700 text-white" />
+                  <Input type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} placeholder="john.doe@lasustech.edu.ng" className="bg-slate-800 border-slate-700 text-white" />
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-muted-foreground">Password</label>
-                  <Input type="password" value={lecturerForm.password} onChange={(e) => setLecturerForm({ ...lecturerForm, password: e.target.value })} placeholder="••••••••" className="bg-slate-800 border-slate-700 text-white" />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Staff ID</label>
-                  <Input value={lecturerForm.staffId} onChange={(e) => setLecturerForm({ ...lecturerForm, staffId: e.target.value })} placeholder="LEC/001" className="bg-slate-800 border-slate-700 text-white" />
+                  <Input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} placeholder="••••••••" className="bg-slate-800 border-slate-700 text-white" />
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-muted-foreground">Department</label>
-                  <Input value={lecturerForm.department} onChange={(e) => setLecturerForm({ ...lecturerForm, department: e.target.value })} placeholder="Computer Science" className="bg-slate-800 border-slate-700 text-white" />
+                  <Input value={userForm.department} onChange={(e) => setUserForm({ ...userForm, department: e.target.value })} placeholder="Computer Science" className="bg-slate-800 border-slate-700 text-white" />
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Position</label>
-                  <Input value={lecturerForm.position} onChange={(e) => setLecturerForm({ ...lecturerForm, position: e.target.value })} placeholder="Senior Lecturer" className="bg-slate-800 border-slate-700 text-white" />
-                </div>
+
+                {userForm.role === 'lecturer' && (
+                  <>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-muted-foreground">Staff ID</label>
+                      <Input value={userForm.staffId} onChange={(e) => setUserForm({ ...userForm, staffId: e.target.value })} placeholder="LEC/001" className="bg-slate-800 border-slate-700 text-white" />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-muted-foreground">Position</label>
+                      <Input value={userForm.position} onChange={(e) => setUserForm({ ...userForm, position: e.target.value })} placeholder="Senior Lecturer" className="bg-slate-800 border-slate-700 text-white" />
+                    </div>
+                  </>
+                )}
+
+                {userForm.role === 'student' && (
+                  <>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-muted-foreground">Matric Number</label>
+                      <Input value={userForm.matricNumber} onChange={(e) => setUserForm({ ...userForm, matricNumber: e.target.value })} placeholder="MAT/001" className="bg-slate-800 border-slate-700 text-white" />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-muted-foreground">Level</label>
+                      <select 
+                        value={userForm.level}
+                        onChange={(e) => setUserForm({ ...userForm, level: e.target.value })}
+                        className="w-full bg-slate-800 border border-slate-700 text-white rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="100">100 Level</option>
+                        <option value="200">200 Level</option>
+                        <option value="300">300 Level</option>
+                        <option value="400">400 Level</option>
+                        <option value="500">500 Level</option>
+                      </select>
+                    </div>
+                  </>
+                )}
               </div>
 
-              <Button onClick={handleSubmitLecturer} disabled={isSavingLecturer} className="w-full bg-primary mt-2">
-                {isSavingLecturer ? 'Creating...' : 'Create Lecturer'}
+              <Button onClick={handleSubmitUser} disabled={isSavingUser} className="w-full bg-primary mt-2">
+                {isSavingUser ? 'Creating...' : 'Create Account'}
               </Button>
             </div>
           </div>

@@ -639,7 +639,7 @@ export async function registerUser(input: RegisterUserInput): Promise<RegisterRe
   };
 }
 
-export async function createLecturerByAdmin(input: RegisterUserInput): Promise<ManagementResult> {
+export async function createUserByAdmin(input: RegisterUserInput): Promise<ManagementResult> {
   if (!isSupabaseConfigured || !supabase) {
     return { success: false, message: 'Supabase is not configured.' };
   }
@@ -664,11 +664,19 @@ export async function createLecturerByAdmin(input: RegisterUserInput): Promise<M
 
   const metadata: Record<string, unknown> = {
     full_name: input.fullName.trim(),
-    role: 'lecturer',
-    department: input.department.trim(),
-    staff_id: input.staffId?.trim(),
-    position: input.position?.trim(),
+    role: input.role,
+    department: input.department?.trim() || 'General Studies',
   };
+
+  if (input.role === 'lecturer') {
+    metadata.staff_id = input.staffId?.trim();
+    metadata.position = input.position?.trim();
+  } else if (input.role === 'student') {
+    metadata.matric_number = input.matricNumber?.trim();
+    metadata.level = input.level;
+  } else if (input.role === 'admin') {
+    // Admin specific metadata if any
+  }
 
   const { error } = await adminClient.auth.admin.createUser({
     email: input.email,
@@ -687,7 +695,7 @@ export async function createLecturerByAdmin(input: RegisterUserInput): Promise<M
   
   return {
     success: true,
-    message: `Lecturer ${input.fullName} created successfully.`,
+    message: `${input.role.charAt(0).toUpperCase() + input.role.slice(1)} ${input.fullName} created successfully.`,
   };
 }
 
