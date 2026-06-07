@@ -699,6 +699,92 @@ export async function createUserByAdmin(input: RegisterUserInput): Promise<Manag
   };
 }
 
+export async function deleteUserByAdmin(userId: string): Promise<ManagementResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Supabase is not configured.' };
+  }
+  
+  const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    return { success: false, message: 'VITE_SUPABASE_SERVICE_ROLE_KEY is missing.' };
+  }
+
+  const { createClient } = await import('@supabase/supabase-js');
+  const adminClient = createClient(import.meta.env.VITE_SUPABASE_URL, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+
+  const { error } = await adminClient.auth.admin.deleteUser(userId);
+  if (error) {
+    return { success: false, message: error.message };
+  }
+  
+  return { success: true, message: 'User deleted successfully.' };
+}
+
+export async function updateUserByAdmin(userId: string, input: Partial<RegisterUserInput>): Promise<ManagementResult> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Supabase is not configured.' };
+  }
+  
+  const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    return { success: false, message: 'VITE_SUPABASE_SERVICE_ROLE_KEY is missing.' };
+  }
+
+  const { createClient } = await import('@supabase/supabase-js');
+  const adminClient = createClient(import.meta.env.VITE_SUPABASE_URL, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+
+  // Update Auth layer
+  const metadata: Record<string, unknown> = {};
+  if (input.fullName) metadata.full_name = input.fullName.trim();
+  if (input.department) metadata.department = input.department.trim();
+  if (input.staffId) metadata.staff_id = input.staffId.trim();
+  if (input.position) metadata.position = input.position.trim();
+  if (input.matricNumber) metadata.matric_number = input.matricNumber.trim();
+  if (input.level) metadata.level = input.level;
+  
+  const updates: any = {};
+  if (input.email) updates.email = input.email;
+  if (input.password) updates.password = input.password;
+  if (Object.keys(metadata).length > 0) updates.user_metadata = metadata;
+
+  const { error: authError } = await adminClient.auth.admin.updateUserById(userId, updates);
+  if (authError) {
+    return { success: false, message: authError.message };
+  }
+
+  // Update Profiles layer directly so UI reflects immediately without needing re-login
+  const profileUpdates: any = { updated_at: new Date().toISOString() };
+  if (input.fullName) profileUpdates.full_name = input.fullName.trim();
+  if (input.email) profileUpdates.email = input.email.trim();
+  if (input.department) profileUpdates.department = input.department.trim();
+
+  if (Object.keys(profileUpdates).length > 1) {
+    await supabase.from('profiles').update(profileUpdates).eq('id', userId);
+  }
+
+  if (input.role === 'lecturer') {
+    const lecUpdates: any = {};
+    if (input.staffId) lecUpdates.staff_id = input.staffId.trim();
+    if (input.position) lecUpdates.position = input.position.trim();
+    if (Object.keys(lecUpdates).length > 0) {
+      await supabase.from('lecturer_profiles').update(lecUpdates).eq('user_id', userId);
+    }
+  } else if (input.role === 'student') {
+    const stuUpdates: any = {};
+    if (input.matricNumber) stuUpdates.matric_number = input.matricNumber.trim();
+    if (input.level) stuUpdates.level = input.level;
+    if (Object.keys(stuUpdates).length > 0) {
+      await supabase.from('student_profiles').update(stuUpdates).eq('user_id', userId);
+    }
+  }
+
+  return { success: true, message: 'User updated successfully.' };
+}
+
 export async function authenticateUser(email: string, password: string, role: UserRole): Promise<AuthResult> {
   if (!isSupabaseConfigured || !supabase) {
     return {

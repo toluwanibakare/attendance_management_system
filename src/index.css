@@ -333,3 +333,34 @@
     }
   }
 }
+
+/* Print Styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .print-hide, nav, aside, button:not(.print-show) {
+    display: none !important;
+  }
+  .glass-card, .bg-slate-900, .bg-slate-800 {
+    background: transparent !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    color: black !important;
+  }
+  * {
+    color: black !important;
+    text-shadow: none !important;
+  }
+  h1, h2, h3, h4, h5, h6, p, span, div {
+    color: black !important;
+  }
+  .text-white, .text-slate-400, .text-muted-foreground {
+    color: black !important;
+  }
+  @page {
+    margin: 1cm;
+    size: A4 landscape;
+  }
+}
