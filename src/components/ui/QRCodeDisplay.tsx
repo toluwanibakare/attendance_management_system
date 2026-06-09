@@ -128,7 +128,7 @@ export function QRCodeDisplay({ session, onClose, scannedCount }: QRCodeDisplayP
 
           {/* Pulse Effect when time is running low */}
           {progress < 20 && (
-            <div className="absolute inset-0 rounded-full border-4 border-destructive/50 animate-ping" />
+            <div className="absolute inset-0 rounded-full border-4 border-destructive/50 animate-ping pointer-events-none" />
           )}
         </div>
 
