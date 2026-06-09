@@ -120,8 +120,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.warn("Sign out error", e);
     }
-    localStorage.clear();
-    sessionStorage.clear();
     setUser(null);
     setIsLoading(false);
   }, []);
