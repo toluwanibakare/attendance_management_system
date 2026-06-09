@@ -1762,24 +1762,38 @@ export async function getStudentCourses(studentId: string): Promise<Course[]> {
     return [];
   }
 
-  const { data: enrollments } = await supabase
+  const { data: enrollments, error: enrollmentsError } = await supabase
     .from('course_enrollments')
     .select('course_id')
     .eq('student_id', studentId);
+
+  if (enrollmentsError) {
+    console.error('Error fetching student enrollments:', enrollmentsError);
+    throw enrollmentsError;
+  }
 
   const courseIds = (enrollments ?? []).map(row => (row as CourseEnrollmentRow).course_id);
 
   if (courseIds.length === 0) return [];
 
-  const { data: courses } = await supabase
+  const { data: courses, error: coursesError } = await supabase
     .from('courses')
     .select('*')
     .in('id', courseIds);
 
-  const { data: schedules } = await supabase
+  if (coursesError) {
+    console.error('Error fetching student courses:', coursesError);
+    throw coursesError;
+  }
+
+  const { data: schedules, error: schedulesError } = await supabase
     .from('course_schedules')
     .select('*')
     .in('course_id', courseIds);
+
+  if (schedulesError) {
+    console.error('Error fetching course schedules:', schedulesError);
+  }
 
   return (courses ?? []).map(course => {
     const courseRow = course as CourseRow;
@@ -1793,17 +1807,29 @@ export async function getLecturerCourses(lecturerId: string): Promise<Course[]> 
     return [];
   }
 
-  const { data: courses } = await supabase
+  const { data: courses, error: coursesError } = await supabase
     .from('courses')
     .select('*')
     .eq('lecturer_id', lecturerId);
 
+  if (coursesError) {
+    console.error('Error fetching lecturer courses:', coursesError);
+    throw coursesError;
+  }
+
   const courseIds = (courses ?? []).map(course => (course as CourseRow).id);
 
-  const { data: schedules } = await supabase
+  if (courseIds.length === 0) return [];
+
+  const { data: schedules, error: schedulesError } = await supabase
     .from('course_schedules')
     .select('*')
     .in('course_id', courseIds);
+
+  if (schedulesError) {
+    console.error('Error fetching course schedules:', schedulesError);
+    // don't throw, just map without schedules if schedule fails
+  }
 
   return (courses ?? []).map(course => {
     const courseRow = course as CourseRow;
