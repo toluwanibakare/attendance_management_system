@@ -4,62 +4,59 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabase/client';
 import { authenticateUser, changeUserPassword, registerUser, restoreAuthenticatedUser, signOutUser, updateProfileInDatabase } from '@/services/universityService';
 import { AuthContext, type RegisterInput, type RegisterOutcome } from '@/hooks/auth-context';
 
-const AUTH_STORAGE_KEY = 'attendance-management-auth-user';
-
-function readStoredUser(): User | null {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!stored) return null;
-
-    return JSON.parse(stored) as User;
-  } catch {
-    return null;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => (isSupabaseConfigured ? null : readStoredUser()));
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // Start as loading until auth resolves
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || isSupabaseConfigured) return;
-
-    if (user) {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-    } else {
-      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    if (!isSupabaseConfigured || !supabase) {
+      setIsLoading(false);
+      return;
     }
-  }, [user]);
-
-  useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
 
     let isMounted = true;
 
-    restoreAuthenticatedUser().then((restoredUser) => {
-      if (isMounted) {
-        setUser(restoredUser);
+    // First load: Try to get existing session
+    const loadInitialSession = async () => {
+      try {
+        const restoredUser = await restoreAuthenticatedUser();
+        if (isMounted) {
+          setUser(restoredUser);
+        }
+      } catch (e) {
+        console.error("Failed to restore auth session:", e);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-    });
+    };
 
-    const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    void loadInitialSession();
+
+    // Listen for ongoing changes (login/logout from this or other tabs)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
-      if (!session?.user) {
+      if (event === 'SIGNED_OUT' || !session?.user) {
         setUser(null);
         return;
       }
 
-      const restoredUser = await restoreAuthenticatedUser();
-      setUser(restoredUser);
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        try {
+          const restoredUser = await restoreAuthenticatedUser();
+          if (isMounted) {
+            setUser(restoredUser);
+          }
+        } catch (e) {
+          console.error("Auth state change error:", e);
+        }
+      }
     });
 
     return () => {
       isMounted = false;
-      data.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -70,13 +67,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { user: authenticatedUser, message } = await authenticateUser(email, _password, role);
 
-      if (authenticatedUser) {
-        setUser(authenticatedUser);
-        return true;
+      if (!authenticatedUser) {
+        setAuthError(message || 'Invalid credentials.');
+        return false;
       }
-
-      setAuthError(message);
-      return false;
+      
+      // We don't set user manually here; we let onAuthStateChange do it to avoid race conditions
+      // However, we must wait for it if we want to navigate smoothly. 
+      // Fortunately, authenticateUser now awaits loadSupabaseUser internally,
+      // so we can set it here purely to immediately satisfy ProtectedRoute.
+      setUser(authenticatedUser);
+      return true;
     } catch (error: any) {
       setAuthError(error?.message || 'An unexpected error occurred during login.');
       return false;
@@ -89,28 +90,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setAuthError(null);
 
-    const result = await registerUser(input);
+    try {
+      const result = await registerUser(input);
 
-    if (result.errorCode) {
-      setAuthError(result.message ?? 'Unable to create account.');
-      setIsLoading(false);
+      if (result.errorCode) {
+        setAuthError(result.message ?? 'Unable to create account.');
+        return {
+          success: false,
+          needsEmailConfirmation: false,
+          message: result.message,
+        };
+      }
+
+      if (result.user && !result.needsEmailConfirmation) {
+        setUser(result.user);
+      }
+
       return {
-        success: false,
-        needsEmailConfirmation: false,
+        success: true,
+        needsEmailConfirmation: result.needsEmailConfirmation,
         message: result.message,
       };
+    } finally {
+      setIsLoading(false);
     }
-
-    if (result.user && !result.needsEmailConfirmation) {
-      setUser(result.user);
-    }
-
-    setIsLoading(false);
-    return {
-      success: true,
-      needsEmailConfirmation: result.needsEmailConfirmation,
-      message: result.message,
-    };
   }, []);
 
   const logout = useCallback(async () => {
@@ -119,9 +122,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await signOutUser();
     } catch (e) {
       console.warn("Sign out error", e);
+    } finally {
+      // Allow onAuthStateChange to clear the user to prevent deadlocks,
+      // but clear it here as a fallback in case the event is delayed.
+      setUser(null);
+      setIsLoading(false);
     }
-    setUser(null);
-    setIsLoading(false);
   }, []);
 
   const updateUserProfile = useCallback(async (updates: Partial<Pick<User, 'name' | 'email' | 'department' | 'avatar'>>) => {

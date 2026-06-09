@@ -804,11 +804,12 @@ export async function authenticateUser(email: string, password: string, role: Us
     };
   }
 
-  void syncAuthenticatedProfile();
-  void loadSupabaseUser(data.user);
+  // Ensure profile is synced before we proceed
+  await syncAuthenticatedProfile();
+  const fullUser = await loadSupabaseUser(data.user);
 
   return {
-    user: buildFallbackUser(data.user, role),
+    user: fullUser ?? buildFallbackUser(data.user, role),
     errorCode: null,
     message: null,
   };
