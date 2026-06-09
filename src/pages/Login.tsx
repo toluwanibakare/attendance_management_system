@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
@@ -28,7 +28,7 @@ const roles = [
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isLoading, authError } = useAuth();
+  const { login, isLoading, isInitializing, isAuthenticated, authError } = useAuth();
   const { success, error } = useToast();
   
   const [selectedRole, setSelectedRole] = useState<UserRole>('student');
@@ -62,6 +62,22 @@ export function Login() {
       error(authError ?? 'Invalid credentials. Please try again.');
     }
   };
+
+  useEffect(() => {
+    if (isAuthenticated && !isInitializing) {
+      const fromPath = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+      navigate(fromPath || '/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, isInitializing, navigate, location]);
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+        <p className="mt-4 text-muted-foreground text-sm font-medium">Loading AttendX Pro...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">

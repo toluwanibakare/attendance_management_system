@@ -27,8 +27,17 @@ function ProtectedRoute({
   children: React.ReactNode; 
   allowedRoles: UserRole[];
 }) {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isInitializing } = useAuth();
   const location = useLocation();
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+        <p className="mt-4 text-muted-foreground text-sm font-medium">Loading AttendX Pro...</p>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;

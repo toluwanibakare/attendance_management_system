@@ -6,12 +6,13 @@ import { AuthContext, type RegisterInput, type RegisterOutcome } from '@/hooks/a
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Start as loading until auth resolves
+  const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
-      setIsLoading(false);
+      setIsInitializing(false);
       return;
     }
 
@@ -27,7 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         console.error("Failed to restore auth session:", e);
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMounted) setIsInitializing(false);
       }
     };
 
@@ -163,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateUserProfile,
       changePassword,
       isLoading,
+      isInitializing,
       authError
     }}>
       {children}

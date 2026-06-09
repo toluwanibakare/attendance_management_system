@@ -28,6 +28,7 @@ export interface AuthContextType {
   updateUserProfile: (updates: Partial<Pick<User, 'name' | 'email' | 'department' | 'avatar'>>) => Promise<User | null>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
   isLoading: boolean;
+  isInitializing: boolean;
   authError: string | null;
 }
 
