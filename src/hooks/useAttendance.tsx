@@ -149,7 +149,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     const barcodeData = `${courseCode}-${now.toISOString().split('T')[0]}-${now.getHours()}${now.getMinutes()}-${lecturerId}-${Math.random().toString(36).substring(2, 8)}`;
     
     const newSession: ActiveSession = {
-      id: `sess_${Date.now()}`,
+      id: crypto.randomUUID(),
       courseId,
       courseCode,
       courseTitle,

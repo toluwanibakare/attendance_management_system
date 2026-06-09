@@ -113,9 +113,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const logout = useCallback(() => {
-    void signOutUser();
+  const logout = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      await signOutUser();
+    } catch (e) {
+      console.warn("Sign out error", e);
+    }
+    localStorage.clear();
+    sessionStorage.clear();
     setUser(null);
+    setIsLoading(false);
   }, []);
 
   const updateUserProfile = useCallback(async (updates: Partial<Pick<User, 'name' | 'email' | 'department' | 'avatar'>>) => {

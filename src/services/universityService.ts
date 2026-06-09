@@ -1689,7 +1689,7 @@ export async function recordAttendanceScan(params: {
 }): Promise<AttendanceRecord | null> {
   const now = new Date();
   const record: AttendanceRecord = {
-    id: `att_${Date.now()}`,
+    id: crypto.randomUUID(),
     courseId: params.session.courseId,
     courseCode: params.session.courseCode,
     courseTitle: params.session.courseTitle,

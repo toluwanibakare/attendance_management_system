@@ -22,6 +22,7 @@ import {
   UserPlus,
   Trash2,
   Copy,
+  Edit,
 } from 'lucide-react';
 import { useAdmin } from '@/hooks/useAuthHooks';
 import { useAttendance } from '@/hooks/useAttendance';
