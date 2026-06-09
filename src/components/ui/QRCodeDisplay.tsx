@@ -7,11 +7,12 @@ import type { ActiveSession } from '@/types';
 
 interface QRCodeDisplayProps {
   session: ActiveSession;
-  onClose: () => void;
+  onHide: () => void;
+  onEndSession: () => void;
   scannedCount: number;
 }
 
-export function QRCodeDisplay({ session, onClose, scannedCount }: QRCodeDisplayProps) {
+export function QRCodeDisplay({ session, onHide, onEndSession, scannedCount }: QRCodeDisplayProps) {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [progress, setProgress] = useState<number>(100);
 
@@ -63,8 +64,8 @@ export function QRCodeDisplay({ session, onClose, scannedCount }: QRCodeDisplayP
       >
         {/* Close Button */}
         <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 transition-colors"
+          onClick={onHide}
+          className="absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 transition-colors z-10"
         >
           <X className="w-5 h-5 text-muted-foreground" />
         </button>
@@ -186,15 +187,24 @@ export function QRCodeDisplay({ session, onClose, scannedCount }: QRCodeDisplayP
           </motion.div>
         )}
 
-        {/* End Session Button */}
-        <Button
-          onClick={onClose}
-          variant="destructive"
-          className="w-full"
-          size="lg"
-        >
-          End Session
-        </Button>
+        <div className="flex gap-3 mt-8">
+          <Button
+            onClick={onHide}
+            variant="outline"
+            className="flex-1 border-white/10"
+            size="lg"
+          >
+            Hide QR Code
+          </Button>
+          <Button
+            onClick={onEndSession}
+            variant="destructive"
+            className="flex-1"
+            size="lg"
+          >
+            End Session
+          </Button>
+        </div>
       </motion.div>
     </motion.div>
   );

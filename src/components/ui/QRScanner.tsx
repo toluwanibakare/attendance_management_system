@@ -43,11 +43,16 @@ export function QRScanner({ bluetoothSession, studentId, onScan, onClose }: QRSc
         bluetoothDeviceName,
         bluetoothDeviceId,
       }));
-      setScanResult(result);
 
       if (result.success && scannerRef.current) {
-        await scannerRef.current.stop();
+        try {
+          await scannerRef.current.stop();
+        } catch (e) {
+          // Ignore stop errors
+        }
       }
+
+      setScanResult(result);
     } finally {
       isProcessingRef.current = false;
     }

@@ -152,10 +152,12 @@ export function LecturerDashboard() {
     }
   };
 
-  const getScannedCount = () => {
-    if (!currentSession) return 0;
-    const session = activeSessions.find(s => s.id === currentSession.id);
-    return session?.scannedStudents.length || 0;
+  const getScannedCount = (sessionId?: string) => {
+    if (!sessionId && !currentSession) return 0;
+    const targetId = sessionId || currentSession?.id;
+    if (!targetId) return 0;
+    
+    return attendanceRecords.filter(r => r.sessionId === targetId).length;
   };
 
   return (
@@ -541,8 +543,9 @@ export function LecturerDashboard() {
         {showQRCode && currentSession && (
           <QRCodeDisplay
             session={currentSession}
-            onClose={handleEndSession}
-            scannedCount={getScannedCount()}
+            onHide={() => setShowQRCode(false)}
+            onEndSession={handleEndSession}
+            scannedCount={getScannedCount(currentSession.id)}
           />
         )}
       </AnimatePresence>
