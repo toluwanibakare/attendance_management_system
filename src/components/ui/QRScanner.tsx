@@ -20,6 +20,7 @@ interface QRScannerProps {
 export function QRScanner({ bluetoothSession, studentId, onScan, onClose }: QRScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [scanAttempt, setScanAttempt] = useState(0);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isBluetoothVerifying, setIsBluetoothVerifying] = useState(false);
@@ -44,12 +45,15 @@ export function QRScanner({ bluetoothSession, studentId, onScan, onClose }: QRSc
         bluetoothDeviceId,
       }));
 
-      if (result.success && scannerRef.current) {
+      // Always stop the scanner before we show a result overlay, 
+      // because the scanner div will be unmounted.
+      if (scannerRef.current) {
         try {
           await scannerRef.current.stop();
         } catch (e) {
           // Ignore stop errors
         }
+        scannerRef.current = null;
       }
 
       setScanResult(result);
@@ -60,6 +64,11 @@ export function QRScanner({ bluetoothSession, studentId, onScan, onClose }: QRSc
 
   useEffect(() => {
     if (bluetoothRequired && !isBluetoothVerified) {
+      return;
+    }
+    
+    // If a scan result is currently showing, don't initialize the scanner
+    if (scanResult) {
       return;
     }
 
@@ -95,7 +104,7 @@ export function QRScanner({ bluetoothSession, studentId, onScan, onClose }: QRSc
         scannerRef.current.stop().catch(() => {});
       }
     };
-  }, [bluetoothRequired, handleScan, isBluetoothVerified]);
+  }, [bluetoothRequired, handleScan, isBluetoothVerified, scanAttempt]); // Re-run when scanAttempt changes
 
   const handleBluetoothVerify = async () => {
     if (!bluetoothSession) return;
@@ -142,11 +151,7 @@ export function QRScanner({ bluetoothSession, studentId, onScan, onClose }: QRSc
   const handleRetry = () => {
     setScanResult(null);
     setCameraError(null);
-    
-    // Restart scanner
-    if (scannerRef.current) {
-      scannerRef.current.resume();
-    }
+    setScanAttempt(prev => prev + 1); // Trigger useEffect to re-initialize scanner
   };
 
   return (

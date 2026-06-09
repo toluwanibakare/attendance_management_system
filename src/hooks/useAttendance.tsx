@@ -198,8 +198,48 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     bluetoothContext?: BluetoothVerificationContext
   ): Promise<ScanResult> => {
     const rawBarcode = barcodeData.trim();
-    const session = activeSessions.find(s => s.barcodeData.trim() === rawBarcode);
+    let session = activeSessions.find(s => s.barcodeData.trim() === rawBarcode);
     
+    if (!session) {
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase
+          .from('attendance_sessions')
+          .select('*')
+          .eq('barcode_data', rawBarcode)
+          .single();
+          
+        if (!error && data) {
+          // @ts-expect-error - we know mapSessionRow works but it's in a different file, we can reconstruct or fetch via service
+          session = {
+            id: data.id,
+            courseId: data.course_id,
+            courseCode: data.course_code,
+            courseTitle: data.course_title,
+            lecturerId: data.lecturer_id,
+            lecturerName: data.lecturer_name,
+            barcodeData: data.barcode_data,
+            createdAt: data.created_at,
+            expiresAt: data.expires_at,
+            duration: data.duration_minutes,
+            scannedStudents: data.scanned_student_ids ?? [],
+            totalStudents: data.total_students,
+            room: data.room,
+            isActive: data.is_active,
+            requiresBluetooth: data.requires_bluetooth,
+            bluetoothDeviceName: data.bluetooth_device_name ?? undefined,
+            bluetoothServiceUuid: data.bluetooth_service_uuid ?? undefined,
+          };
+          
+          setActiveSessions(prev => {
+            if (!session) return prev;
+            const exists = prev.find(s => s.id === session!.id);
+            if (!exists) return [...prev, session];
+            return prev.map(s => s.id === session!.id ? session! : s);
+          });
+        }
+      }
+    }
+
     if (!session) {
       return {
         success: false,

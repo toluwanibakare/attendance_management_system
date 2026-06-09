@@ -1661,6 +1661,7 @@ export async function createAttendanceSession(session: ActiveSession): Promise<A
     .single();
 
   if (error || !data) {
+    console.error("Failed to create attendance session in Supabase:", error);
     return {
       ...session,
       scannedStudents: [],
