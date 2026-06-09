@@ -10,6 +10,7 @@ import {
   recordAttendanceScan,
   subscribeToAttendanceChanges,
 } from '@/services/universityService';
+import { useAuth } from '@/hooks/useAuthHooks';
 
 const ACTIVE_SESSIONS_STORAGE_KEY = 'attendance-management-active-sessions';
 const ATTENDANCE_RECORDS_STORAGE_KEY = 'attendance-management-attendance-records';
@@ -86,8 +87,10 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(ATTENDANCE_RECORDS_STORAGE_KEY, JSON.stringify(attendanceRecords));
   }, [activeSessions, attendanceRecords]);
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured || !user) return;
 
     let isMounted = true;
 
@@ -125,7 +128,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
       isMounted = false;
       cleanup?.();
     };
-  }, []);
+  }, [user]);
 
   const generateSession = useCallback((
     courseId: string,
@@ -194,12 +197,20 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     studentId: string,
     bluetoothContext?: BluetoothVerificationContext
   ): Promise<ScanResult> => {
-    const session = activeSessions.find(s => s.barcodeData === barcodeData && s.isActive);
+    const rawBarcode = barcodeData.trim();
+    const session = activeSessions.find(s => s.barcodeData.trim() === rawBarcode);
     
     if (!session) {
       return {
         success: false,
-        message: 'Invalid or expired barcode. Please try again.'
+        message: 'Invalid QR code. This code does not match any known session.'
+      };
+    }
+
+    if (!session.isActive) {
+      return {
+        success: false,
+        message: 'This attendance session has been closed by the lecturer.'
       };
     }
     
@@ -209,7 +220,7 @@ export function AttendanceProvider({ children }: { children: ReactNode }) {
     if (now > expiresAt) {
       return {
         success: false,
-        message: 'This attendance session has expired.'
+        message: 'This attendance session has expired based on the time limit.'
       };
     }
     
